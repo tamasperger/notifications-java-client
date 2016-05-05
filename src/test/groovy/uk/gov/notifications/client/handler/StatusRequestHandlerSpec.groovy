@@ -10,7 +10,7 @@ import static uk.gov.notifications.testutil.TestStub.govNotifyHttpClientStub
 
 public class StatusRequestHandlerSpec extends Specification {
 
-    def STATUS_RESPONSE = ["data": ["notification":
+    def STATUS_RESPONSE = ["notification":
                                     ["content_char_count": 29,
                                     "created_at": "2016-04-25T10:27:03.524679+00:00",
                                     "id": "6e1c96a7-4da6-439a-8143-037fad35f317",
@@ -29,8 +29,8 @@ public class StatusRequestHandlerSpec extends Specification {
                                     "updated_at": "2016-04-25T10:27:04.550407+00:00"
                                     ]
                                     ]
-                          ]
-    def SENDING_STATUS_RESPONSE = ["data": ["notification":
+
+    def SENDING_STATUS_RESPONSE = ["notification":
                                             [
                                              "id": "6e1c96a7-4da6-439a-8143-037fad35f317",
                                              "content_char_count": 29,
@@ -49,7 +49,6 @@ public class StatusRequestHandlerSpec extends Specification {
                                              "to": "+441234123123",
                                              "updated_at": null
                                             ]
-    ]
     ]
     def httpClient = govNotifyHttpClientStub(toJson(STATUS_RESPONSE))
     def handler = new StatusRequestHandler(CONFIGURATION, httpClient)
@@ -79,7 +78,7 @@ public class StatusRequestHandlerSpec extends Specification {
         def response = handler.handle request
 
         then:
-        def notificationObject = STATUS_RESPONSE["data"]["notification"];
+        def notificationObject = STATUS_RESPONSE["notification"];
 
         response.with {
             id == notificationObject["id"]
@@ -100,7 +99,7 @@ public class StatusRequestHandlerSpec extends Specification {
         def response = sendingHandler.handle request
 
         then:
-        def notificationObject = SENDING_STATUS_RESPONSE["data"]["notification"];
+        def notificationObject = SENDING_STATUS_RESPONSE["notification"];
 
         response.with {
             id == notificationObject["id"]

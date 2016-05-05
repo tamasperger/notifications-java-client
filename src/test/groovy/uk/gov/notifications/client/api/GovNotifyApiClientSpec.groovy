@@ -20,7 +20,7 @@ class GovNotifyApiClientSpec extends Specification {
     def "When I send email notification request, I expect its id in return"() {
 
         def notificationId = "3"
-        httpClient.send(_) >> httpResponse(toJson(["data":["notification":["id": notificationId]]]));
+        httpClient.send(_) >> httpResponse(toJson(["notification":["id": notificationId]]));
 
         when:
         def response = apiClient.sendEmail "my@example-email.com" , "some_template_id"
@@ -32,7 +32,7 @@ class GovNotifyApiClientSpec extends Specification {
     def "When I send sms notification request, I expect its id in return"() {
 
         def notificationId = "3"
-        httpClient.send(_) >> httpResponse(toJson(["data":["notification":["id": notificationId]]]))
+        httpClient.send(_) >> httpResponse(toJson(["notification":["id": notificationId]]))
 
         when:
         def response = apiClient.sendSms "+487809123123", "some_template_id"
@@ -45,7 +45,7 @@ class GovNotifyApiClientSpec extends Specification {
 
         def notificationId = "6e1c96a7-4da6-439a-8143-037fad35f317"
         httpClient.send(_) >> httpResponse(toJson(
-                ["data": ["notification":
+                ["notification":
                                   ["id"    : notificationId,
                                    "status": "delivered",
                                    "content_char_count": 29,
@@ -65,7 +65,6 @@ class GovNotifyApiClientSpec extends Specification {
                                    "to": "+441111111111",
                                    "updated_at": "2016-04-25T10:27:04.550407+00:00"
                                   ]
-                ]
                 ]
         ));
 

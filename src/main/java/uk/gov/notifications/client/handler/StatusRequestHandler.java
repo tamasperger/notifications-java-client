@@ -38,7 +38,7 @@ public final class StatusRequestHandler {
     private StatusResponse buildResponse(GovNotifyHttpClientResponse httpResponse) {
 
         JSONObject responseBodyAsJson = new JSONObject(httpResponse.getBody());
-        JSONObject notificationStatusJson = responseBodyAsJson.getJSONObject("data").getJSONObject("notification");
+        JSONObject notificationStatusJson = responseBodyAsJson.getJSONObject("notification");
         return StatusResponse.builder()
                 .notification(notificationStatusJson)
                 .build();
