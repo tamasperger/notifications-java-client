@@ -287,6 +287,12 @@ The letter must contain:
 - optional address fields if applicable
 - fields from template
 
+The letter must contain:
+
+- mandatory address fields
+- optional address fields if applicable
+- fields from template
+
 ```java
 HashMap<String, String> personalisation = new HashMap<>();
 personalisation.put("address_line_1", "The Occupier"); // mandatory address field
@@ -424,6 +430,12 @@ The email address the email notification is sent to.
 The template id is visible on the template page in the application.
 
 #### `personalisation`
+
+The letter must contain:
+
+- mandatory address fields
+- optional address fields if applicable
+- fields from template
 
 The letter must contain:
 
