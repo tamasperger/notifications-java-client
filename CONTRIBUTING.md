@@ -23,8 +23,10 @@ You'll be prompted to select an option to submit the API call.
 
 
 ## Readme updates
-Don't update README.md - when you run `./update_version.sh` you'll lose any changes you made there - instead make
-changes in README-tpl.md before you call `./update_version.sh`
+Update README.md as required - but you do not need to update the version numbers: 
+both occurrences are automatically updated when you run `./update_version.sh`.
+
+Note: If you add another instance of the version number in README.md, then the `./update_version.sh` script needs to be adjusted.
 
 
 ## Deploying
