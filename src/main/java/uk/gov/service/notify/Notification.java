@@ -18,6 +18,7 @@ public class Notification {
     private String line5;
     private String line6;
     private String postcode;
+    private String postage;
     private String notificationType;
     private String status;
     private UUID templateId;
@@ -29,6 +30,7 @@ public class Notification {
     private DateTime sentAt;
     private DateTime completedAt;
     private DateTime estimatedDelivery;
+    private String createdByName;
 
     public Notification(String content){
         JSONObject responseBodyAsJson = new JSONObject(content);
@@ -51,6 +53,7 @@ public class Notification {
         line5 = data.isNull("line_5") ? null : data.getString("line_5");
         line6 = data.isNull("line_6") ? null : data.getString("line_6");
         postcode = data.isNull("postcode") ? null : data.getString("postcode");
+        postage = data.isNull("postage") ? null : data.getString("postage");
         notificationType = data.getString("type");
         JSONObject template = data.getJSONObject("template");
         templateId = UUID.fromString(template.getString("id"));
@@ -63,6 +66,7 @@ public class Notification {
         sentAt =  data.isNull("sent_at") ? null : new DateTime(data.getString("sent_at"));
         completedAt = data.isNull("completed_at") ? null : new DateTime(data.getString("completed_at"));
         estimatedDelivery = data.isNull("estimated_delivery") ? null : new DateTime(data.getString("estimated_delivery"));
+        createdByName = data.isNull("created_by_name") ? null : data.getString("created_by_name");
     }
 
     public UUID getId() {
@@ -108,6 +112,9 @@ public class Notification {
     public Optional<String> getPostcode() {
         return Optional.ofNullable(postcode);
     }
+    public Optional<String> getPostage() {
+        return Optional.ofNullable(postage);
+    }
 
     public String getNotificationType() {
         return notificationType;
@@ -149,6 +156,10 @@ public class Notification {
         return Optional.ofNullable(completedAt);
     }
 
+    public Optional<String> getCreatedByName() {
+        return Optional.ofNullable(createdByName);
+    }
+
     /**
      * estimatedDelivery is only present on letters
      */
@@ -181,6 +192,7 @@ public class Notification {
                 ", sentAt=" + sentAt +
                 ", completedAt=" + completedAt +
                 ", estimatedDelivery=" + estimatedDelivery +
+                ", createdByName=" + createdByName +
                 '}';
     }
 }

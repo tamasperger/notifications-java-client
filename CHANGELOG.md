@@ -1,3 +1,70 @@
+## 3.15.1-RELEASE
+* Added 400 has a default value for the httpResult value of a NotificationClientException.
+ - there are some cases when the exception is thrown from the client and not from the API, even though a httpResult. All the exceptions raised can be classified as 400, therefore using 400 as a default.
+
+## 3.15.0-RELEASE
+* Added `NotificationClient.getPdfForLetter` function
+  - accepts `String notificationId`
+  - returns a `byte[]` containing the final printable PDF for a precompiled or templated letter
+
+## 3.14.2-RELEASE
+* Updated old dependencies
+* Updated code to bring in linting standards.
+
+## 3.14.1-RELEASE
+* Updated project properties to use UTF-8
+* Updated GET and POST to use UTF-8 readers and writers
+
+## 3.14.0-RELEASE
+* Added `postage` argument to `NotificationClient.sendPrecompiledLetter` and `NotificationClient.sendPrecompiledLetterWithInputStream`
+* Added `postage` to `LetterResponse`
+* Added `postage` to `Notification`
+* Added `html` to `TemplatePreview`
+
+## 3.13.0-RELEASE
+* Allow passing of `List`s into the personalisation Map to display as a bulleted list in the message.
+
+## 3.12.0-RELEASE
+* Added `NotificationClient.prepareUpload` method that can be used if you want to upload a document and send a link to that docuemnt by email.
+  - Takes a byte[] of document contents
+  - You then add the returned `JSONObject` to the personalisation map.
+  - NOTE: the personalisation map for this call needs to be HashMap<String, Object>
+    - which is why the `sendEmail` no uses a wildcard for the generic definition of the `personalisation` `HashMap`
+
+## 3.11.0-RELEASE
+* Updated `Template` to have `name`, the name of the template as set in Notify.
+
+## 3.10.0-RELEASE
+* Updated `Notification` to have an Optional createdByName. If the notification was sent manually, this will be the name of the sender. If the notification was sent through the API, this will be `Optional.empty()`.
+* New method, `sendPrecompiledLetterWithInputStream`, to send a precompiled letter using an InputStream rather than a file.
+
+## 3.9.2-RELEASE
+* Updated testEmailNotificationWithoutPersonalisationReturnsErrorMessageIT to only look for the BadRequestError rather than the json "error": BadRequestError
+
+## 3.9.1-RELEASE
+* Response to `sendPrecompiledLetter` updated
+  - The response now only includes the notification id and the client reference
+
+## 3.9.0-RELEASE
+* `sendPrecompiledLetter` added to NotificationClient
+  - The client can now send PDF files which conform to the Notify printing template
+  - Send a Java File object or a base64 encoded string
+  - 'reference' must be provided to identify the document
+
+## 3.8.0-RELEASE
+* Added `getTextMessages(String olderThan)` method to fetch received text messages.
+
+## 3.7.0-RELEASE
+* Update to `NotificationsAPIClient.sendSms()`
+    * added `smsSenderId`: an optional smsSenderId specified when adding text message senders under service settings, if this is not provided the default text message sender for the service will be used. `smsSenderId` can be omitted.
+
+## 3.6.0-RELEASE
+* Update to `NotificationsAPIClient.sendEmail()`
+    * added `emailReplyToId`: an optional email_reply_to_id specified when adding Email reply to addresses under service settings, if this is not provided the reply to email will be the service default reply to email. `emailReplyToId` can be omitted.
+
+## 3.5.1-RELEASE
+* Attached source and javadoc artifacts to jar
+
 ## 3.5.0-RELEASE
 * `Template` now contains `personalisation`, a map of the template placeholder names.
 

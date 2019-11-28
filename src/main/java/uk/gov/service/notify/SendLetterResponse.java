@@ -2,38 +2,24 @@ package uk.gov.service.notify;
 
 import org.json.JSONObject;
 
-import java.util.Optional;
 import java.util.UUID;
 
-public class SendLetterResponse {
-    private UUID notificationId;
-    private String reference;
-    private UUID templateId;
-    private int templateVersion;
-    private String templateUri;
-    private String body;
-    private String subject;
-
+public class SendLetterResponse extends LetterResponse {
+    private final UUID templateId;
+    private final int templateVersion;
+    private final String templateUri;
+    private final String body;
+    private final String subject;
 
     public SendLetterResponse(String response) {
-        JSONObject data = new JSONObject(response);
-        notificationId = UUID.fromString(data.getString("id"));
-        reference = data.isNull("reference") ? null : data.getString("reference");
-        JSONObject content = data.getJSONObject("content");
-        body = content.getString("body");
-        subject = content.getString("subject");
-        JSONObject template = data.getJSONObject("template");
+        super(response);
+        JSONObject content = getData().getJSONObject("content");
+        body = tryToGetString(content, "body");
+        subject = tryToGetString(content, "subject");
+        JSONObject template = getData().getJSONObject("template");
         templateId = UUID.fromString(template.getString("id"));
         templateVersion = template.getInt("version");
         templateUri = template.getString("uri");
-    }
-
-    public UUID getNotificationId() {
-        return notificationId;
-    }
-
-    public Optional<String> getReference() {
-        return Optional.ofNullable(reference);
     }
 
     public UUID getTemplateId() {
@@ -59,8 +45,8 @@ public class SendLetterResponse {
     @Override
     public String toString() {
         return "SendLetterResponse{" +
-                "notificationId=" + notificationId +
-                ", reference=" + reference +
+                "notificationId=" + getNotificationId() +
+                ", reference=" + getReference() +
                 ", templateId=" + templateId +
                 ", templateVersion=" + templateVersion +
                 ", templateUri='" + templateUri + '\'' +

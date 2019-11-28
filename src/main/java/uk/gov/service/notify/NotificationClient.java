@@ -1,26 +1,39 @@
 package uk.gov.service.notify;
 
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.codec.binary.Base64InputStream;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.http.client.utils.URIBuilder;
+import org.json.JSONObject;
+
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.net.*;
+import java.net.HttpURLConnection;
+import java.net.Proxy;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.security.NoSuchAlgorithmException;
 import java.util.Map;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import org.apache.http.client.utils.URIBuilder;
 
-import org.json.JSONObject;
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class NotificationClient implements NotificationClientApi {
 
     private static final Logger LOGGER = Logger.getLogger(NotificationClient.class.toString());
-    public static final String LIVE_BASE_URL = "https://api.notifications.service.gov.uk";
+    private static final String LIVE_BASE_URL = "https://api.notifications.service.gov.uk";
 
     private final String apiKey;
     private final String serviceId;
@@ -56,7 +69,7 @@ public class NotificationClient implements NotificationClientApi {
     /**
      * This client constructor is used for testing on other environments, used by the GOV.UK Notify team.
      * @param apiKey Generate an API key by signing in to GOV.UK Notify, https://www.notifications.service.gov.uk, and going to the **API integration** page
-     * @param baseUrl
+     * @param baseUrl base URL, defaults to https://api.notifications.service.gov.uk
      */
     public NotificationClient(final String apiKey, final String baseUrl) {
         this(
@@ -71,7 +84,7 @@ public class NotificationClient implements NotificationClientApi {
      *
      * @param apiKey Generate an API key by signing in to GOV.UK Notify, https://www.notifications.service.gov.uk, and going to the **API integration** page
      * @param baseUrl base URL, defaults to https://api.notifications.service.gov.uk
-     * @param proxy
+     * @param proxy Proxy used on the http requests
      */
     public NotificationClient(final String apiKey, final String baseUrl, final Proxy proxy) {
         this(
@@ -87,17 +100,17 @@ public class NotificationClient implements NotificationClientApi {
         }
     }
 
-    public NotificationClient(final String apiKey, final String baseUrl, final Proxy proxy, final SSLContext sslContext){
+    public NotificationClient(final String apiKey,
+                              final String baseUrl,
+                              final Proxy proxy,
+                              final SSLContext sslContext){
+
         this.apiKey = extractApiKey(apiKey);
         this.serviceId = extractServiceId(apiKey);
         this.baseUrl = baseUrl;
         this.proxy = proxy;
         if (sslContext != null){
-            try {
-                setCustomSSLContext(sslContext);
-            } catch (NoSuchAlgorithmException e) {
-                LOGGER.log(Level.SEVERE, e.toString(), e);
-            }
+            setCustomSSLContext(sslContext);
         }
         this.version = getVersion();
     }
@@ -122,94 +135,86 @@ public class NotificationClient implements NotificationClientApi {
         return proxy;
     }
 
-    /**
-     * The sendEmail method will create an HTTPS POST request. A JWT token will be created and added as an Authorization header to the request.
-     *
-     * @param templateId      Find templateId by clicking API info for the template you want to send
-     * @param emailAddress    The email address
-     * @param personalisation Map representing the placeholders for the template if any. For example, key=name value=Bob
-     *                        Can be an empty map or null when the template does not require placeholders.
-     * @param reference       A reference specified by the service for the notification. Get all notifications can be filtered by this reference.
-     *                        This reference can be unique or used used to refer to a batch of notifications.
-     *                        Can be an empty string or null, when you do not require a reference for the notifications.
-     * @return <code>SendEmailResponse</code>
-     * @throws NotificationClientException
-     */
-    public SendEmailResponse sendEmail(String templateId, String emailAddress, Map<String, String> personalisation, String reference) throws NotificationClientException {
-        JSONObject body = createBodyForPostRequest(templateId, null, emailAddress, personalisation, reference);
-        HttpsURLConnection conn = createConnectionAndSetHeaders(baseUrl + "/v2/notifications/email", "POST");
+    public SendEmailResponse sendEmail(String templateId,
+                                       String emailAddress,
+                                       Map<String, ?> personalisation,
+                                       String reference) throws NotificationClientException {
+        return sendEmail(templateId, emailAddress, personalisation, reference, "");
+    }
+
+    @Override
+    public SendEmailResponse sendEmail(String templateId,
+                                       String emailAddress,
+                                       Map<String, ?> personalisation,
+                                       String reference,
+                                       String emailReplyToId) throws NotificationClientException {
+
+        JSONObject body = createBodyForPostRequest(templateId,
+                null,
+                emailAddress,
+                personalisation,
+                reference,
+                null,
+                null);
+
+        if(emailReplyToId != null && !emailReplyToId.isEmpty())
+        {
+            body.put("email_reply_to_id", emailReplyToId);
+        }
+
+        HttpURLConnection conn = createConnectionAndSetHeaders(baseUrl + "/v2/notifications/email", "POST");
         String response = performPostRequest(conn, body, HttpsURLConnection.HTTP_CREATED);
         return new SendEmailResponse(response);
     }
 
-    /**
-     * The sendSms method will create an HTTPS POST request. A JWT token will be created and added as an Authorization header to the request.
-     *
-     * @param templateId      Find templateId by clicking API info for the template you want to send
-     * @param phoneNumber              The mobile phone number
-     * @param personalisation Map representing the placeholders for the template if any. For example, key=name value=Bob
-     *                        Can be an empty map or null when the template does not require placeholders.
-     * @param reference       A reference specified by the service for the notification. Get all notifications can be filtered by this reference.
-     *                        This reference can be unique or used used to refer to a batch of notifications.
-     *                        Can be an empty string or null, when you do not require a reference for the notifications.
-     * @return <code>SendSmsResponse</code>
-     * @throws NotificationClientException
-     */
-    public SendSmsResponse sendSms(String templateId, String phoneNumber, Map<String, String> personalisation, String reference) throws NotificationClientException {
-        JSONObject body = createBodyForPostRequest(templateId, phoneNumber, null, personalisation, reference);
-        HttpsURLConnection conn = createConnectionAndSetHeaders(baseUrl + "/v2/notifications/sms", "POST");
+    public SendSmsResponse sendSms(String templateId, String phoneNumber, Map<String, ?> personalisation, String reference) throws NotificationClientException {
+        return sendSms(templateId, phoneNumber, personalisation, reference, "");
+    }
+
+    public SendSmsResponse sendSms(String templateId,
+                                   String phoneNumber,
+                                   Map<String, ?> personalisation,
+                                   String reference,
+                                   String smsSenderId) throws NotificationClientException {
+
+        JSONObject body = createBodyForPostRequest(templateId,
+                phoneNumber,
+                null,
+                personalisation,
+                reference,
+                null,
+                null);
+
+        if( smsSenderId != null && !smsSenderId.isEmpty()){
+            body.put("sms_sender_id", smsSenderId);
+        }
+        HttpURLConnection conn = createConnectionAndSetHeaders(baseUrl + "/v2/notifications/sms", "POST");
         String response = performPostRequest(conn, body, HttpsURLConnection.HTTP_CREATED);
         return new SendSmsResponse(response);
     }
 
-
-    /**
-     * The sendLetter method will create an HTTPS POST request. A JWT token will be created and added as an Authorization header to the request.
-     *
-     * @param templateId      Find templateId by clicking API info for the template you want to send
-     * @param personalisation Map representing the placeholders for the template if any. For example, key=name value=Bob.
-     *                        Must include the keys "address_line_1", "address_line_2" and "postcode".
-     * @param reference       A reference specified by the service for the notification. Get all notifications can be filtered by this reference.
-     *                        This reference can be unique or used used to refer to a batch of notifications.
-     *                        Can be an empty string or null, when you do not require a reference for the notifications.
-     * @return <code>SendLetterResponse</code>
-     * @throws NotificationClientException
-     */
-    public SendLetterResponse sendLetter(String templateId, Map<String, String> personalisation, String reference) throws NotificationClientException {
-        JSONObject body = createBodyForPostRequest(templateId, null, null, personalisation, reference);
-        HttpsURLConnection conn = createConnectionAndSetHeaders(baseUrl + "/v2/notifications/letter", "POST");
+    public SendLetterResponse sendLetter(String templateId, Map<String, ?> personalisation, String reference) throws NotificationClientException {
+        JSONObject body = createBodyForPostRequest(templateId, null, null, personalisation, reference, null, null);
+        HttpURLConnection conn = createConnectionAndSetHeaders(baseUrl + "/v2/notifications/letter", "POST");
         String response = performPostRequest(conn, body, HttpsURLConnection.HTTP_CREATED);
         return new SendLetterResponse(response);
     }
 
-    /**
-     * The getNotificationById method will return a <code>Notification</code> for a given notification id.
-     * The id is can be retrieved from the <code>NotificationResponse</code> of a <code>sendEmail</code> or <code>sendSms</code> request.
-     *
-     * @param notificationId The id of the notification.
-     * @return <code>Notification</code>
-     * @throws NotificationClientException
-     */
     public Notification getNotificationById(String notificationId) throws NotificationClientException {
         String url = baseUrl + "/v2/notifications/" + notificationId;
-        HttpsURLConnection conn = createConnectionAndSetHeaders(url, "GET");
+        HttpURLConnection conn = createConnectionAndSetHeaders(url, "GET");
         String response = performGetRequest(conn);
         return new Notification(response);
 
     }
 
-    /**
-     * The getNotifications method will create a GET HTTPS request to retrieve all the notifications.
-     *
-     * @param status If status is not empty or null notifications will only return notifications for the given status.
-     *               Possible statuses are created|sending|delivered|permanent-failure|temporary-failure|technical-failure
-     * @param notification_type If notification_type is not empty or null only notifications of the given status will be returned.
-     *                          Possible notificationTypes are sms|email
-     * @param reference If reference is not empty or null only the notifications with that reference are returned.
-     * @param olderThanId If olderThanId is not empty or null only the notifications older than that notification id are returned.
-     * @return <code>NotificationList</code>
-     * @throws NotificationClientException
-     */
+    public byte[] getPdfForLetter(String notificationId) throws NotificationClientException {
+        String url = baseUrl + "/v2/notifications/" + notificationId + "/pdf";
+        HttpURLConnection conn = createConnectionAndSetHeaders(url, "GET");
+
+        return performRawGetRequest(conn);
+    }
+
     public NotificationList getNotifications(String status, String notification_type, String reference, String olderThanId) throws NotificationClientException {
         try {
             URIBuilder builder = new URIBuilder(baseUrl + "/v2/notifications");
@@ -226,7 +231,7 @@ public class NotificationClient implements NotificationClientApi {
                 builder.addParameter("older_than", olderThanId);
             }
 
-            HttpsURLConnection conn = createConnectionAndSetHeaders(builder.toString(), "GET");
+            HttpURLConnection conn = createConnectionAndSetHeaders(builder.toString(), "GET");
             String response = performGetRequest(conn);
             return new NotificationList(response);
         } catch (URISyntaxException e) {
@@ -235,50 +240,27 @@ public class NotificationClient implements NotificationClientApi {
         }
     }
 
-    /**
-     * The getTemplateById returns a <code>Template</code> given the template id.
-     *
-     * @param templateId The template id is visible from the template page in the application.
-     * @return <code>Template</code>
-     */
     public Template getTemplateById(String templateId) throws NotificationClientException{
         String url = baseUrl + "/v2/template/" + templateId;
-        HttpsURLConnection conn = createConnectionAndSetHeaders(url, "GET");
+        HttpURLConnection conn = createConnectionAndSetHeaders(url, "GET");
         String response = performGetRequest(conn);
         return new Template(response);
     }
 
-    /**
-     * The getTemplateVersion returns a <code>Template</code> given the template id and version.
-     *
-     *
-     * @param templateId The template id is visible from the template page in the application.
-     * @param version The version of the template to return
-     * @return <code>Template</code>
-     * @throws NotificationClientException
-     */
     public Template getTemplateVersion(String templateId, int version) throws NotificationClientException{
         String url = baseUrl + "/v2/template/" + templateId + "/version/" + version;
-        HttpsURLConnection conn = createConnectionAndSetHeaders(url, "GET");
+        HttpURLConnection conn = createConnectionAndSetHeaders(url, "GET");
         String response = performGetRequest(conn);
         return new Template(response);
     }
 
-    /**
-     * Returns all the templates for your service. Filtered by template type if not null.
-     *
-     * @param templateType If templateType is not empty or null templates will be filtered by type.
-     *          Possible template types are email|sms|letter
-     * @return <code>TemplateList</code>
-     * @throws NotificationClientException
-     */
     public TemplateList getAllTemplates(String templateType) throws NotificationClientException{
         try{
             URIBuilder builder = new URIBuilder(baseUrl + "/v2/templates");
             if (templateType != null && !templateType.isEmpty()) {
                 builder.addParameter("type", templateType);
             }
-            HttpsURLConnection conn = createConnectionAndSetHeaders(builder.toString(), "GET");
+            HttpURLConnection conn = createConnectionAndSetHeaders(builder.toString(), "GET");
             String response = performGetRequest(conn);
             return new TemplateList(response);
         } catch (URISyntaxException e) {
@@ -287,37 +269,62 @@ public class NotificationClient implements NotificationClientApi {
         }
     }
 
-    /**
-     * The generateTemplatePreview returns a template with the placeholders replaced with the given personalisation.
-     *
-     * @param templateId The template id is visible from the template page in the application.
-     * @param personalisation Map representing the placeholders for the template if any. For example, key=name value=Bob
-     *                        Can be an empty map or null when the template does not require placeholders.
-     * @return <code>TemplatePreview</code>
-     * @throws NotificationClientException
-     */
-    public TemplatePreview generateTemplatePreview(String templateId, Map<String, String> personalisation) throws NotificationClientException {
+    public TemplatePreview generateTemplatePreview(String templateId, Map<String, Object> personalisation) throws NotificationClientException {
         JSONObject body = new JSONObject();
         if (personalisation != null && !personalisation.isEmpty()) {
             body.put("personalisation", new JSONObject(personalisation));
         }
-        HttpsURLConnection conn = createConnectionAndSetHeaders(baseUrl + "/v2/template/" + templateId + "/preview", "POST");
+        HttpURLConnection conn = createConnectionAndSetHeaders(baseUrl + "/v2/template/" + templateId + "/preview", "POST");
         String response = performPostRequest(conn, body, HttpsURLConnection.HTTP_OK);
         return new TemplatePreview(response);
     }
 
-    private String performPostRequest(HttpsURLConnection conn, JSONObject body, int expectedStatusCode) throws NotificationClientException {
+    public ReceivedTextMessageList getReceivedTextMessages(String olderThanId) throws NotificationClientException {
+        try {
+            URIBuilder builder = new URIBuilder(baseUrl + "/v2/received-text-messages");
+            if (olderThanId != null && !olderThanId.isEmpty()) {
+                builder.addParameter("older_than", olderThanId);
+            }
+            HttpURLConnection conn = createConnectionAndSetHeaders(builder.toString(), "GET");
+            String response = performGetRequest(conn);
+            return new ReceivedTextMessageList(response);
+        } catch (URISyntaxException e){
+            LOGGER.log(Level.SEVERE, e.toString(), e);
+            throw new NotificationClientException(e);
+        }
+    }
+
+    /**
+     * Use the prepareUpload method when uploading a document via sendEmail.
+     * The prepareUpload method creates a <code>JSONObject</code> which will need to be added to the personalisation map.
+     *
+     * @param documentContents byte[] of the document
+     * @return <code>JSONObject</code> a json object to be added to the personalisation is returned
+     */
+    public static JSONObject prepareUpload(final byte[] documentContents) throws NotificationClientException {
+        if (documentContents.length > 2*1024*1024){
+            throw new NotificationClientException(413, "Document is larger than 2MB");
+        }
+        byte[] fileContentAsByte = Base64.encodeBase64(documentContents);
+        String fileContent = new String(fileContentAsByte, ISO_8859_1);
+
+        JSONObject jsonFileObject = new JSONObject();
+        jsonFileObject.put("file", fileContent);
+        return jsonFileObject;
+    }
+
+    private String performPostRequest(HttpURLConnection conn, JSONObject body, int expectedStatusCode) throws NotificationClientException {
         try{
-            OutputStreamWriter wr = new OutputStreamWriter(conn.getOutputStream());
+            OutputStreamWriter wr = new OutputStreamWriter(conn.getOutputStream(), UTF_8);
             wr.write(body.toString());
             wr.flush();
 
             int httpResult = conn.getResponseCode();
             if (httpResult == expectedStatusCode) {
-                StringBuilder sb = readStream(new InputStreamReader(conn.getInputStream(), "utf-8"));
+                StringBuilder sb = readStream(new InputStreamReader(conn.getInputStream(), UTF_8));
                 return sb.toString();
             } else {
-                StringBuilder sb = readStream(new InputStreamReader(conn.getErrorStream(), "utf-8"));
+                StringBuilder sb = readStream(new InputStreamReader(conn.getErrorStream(), UTF_8));
                 throw new NotificationClientException(httpResult, sb.toString());
             }
 
@@ -331,16 +338,16 @@ public class NotificationClient implements NotificationClientApi {
         }
     }
 
-    private String performGetRequest(HttpsURLConnection conn) throws NotificationClientException {
+    private String performGetRequest(HttpURLConnection conn) throws NotificationClientException {
         try{
             int httpResult = conn.getResponseCode();
             StringBuilder stringBuilder;
             if (httpResult == 200) {
-                stringBuilder = readStream(new InputStreamReader(conn.getInputStream()));
+                stringBuilder = readStream(new InputStreamReader(conn.getInputStream(), UTF_8));
                 conn.disconnect();
                 return stringBuilder.toString();
             } else {
-                stringBuilder = readStream(new InputStreamReader(conn.getErrorStream(), "utf-8"));
+                stringBuilder = readStream(new InputStreamReader(conn.getErrorStream(), UTF_8));
                 throw new NotificationClientException(httpResult, stringBuilder.toString());
             }
         } catch (IOException e) {
@@ -353,11 +360,34 @@ public class NotificationClient implements NotificationClientApi {
         }
     }
 
-    private HttpsURLConnection createConnectionAndSetHeaders(String urlString, String method) throws NotificationClientException {
+    private byte[] performRawGetRequest(HttpURLConnection conn) throws NotificationClientException {
+        byte[] out;
+        try{
+            int httpResult = conn.getResponseCode();
+            if (httpResult == 200) {
+                InputStream is = conn.getInputStream();
+                out = IOUtils.toByteArray(is);
+            } else {
+                // errors should be read as a string
+                String s = readStream(new InputStreamReader(conn.getErrorStream(), UTF_8)).toString();
+                throw new NotificationClientException(httpResult, s);
+            }
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, e.toString(), e);
+            throw new NotificationClientException(e);
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+        return out;
+    }
+
+    private HttpURLConnection createConnectionAndSetHeaders(String urlString, String method) throws NotificationClientException {
         try
         {
             URL url = new URL(urlString);
-            HttpsURLConnection conn = getConnection(url);
+            HttpURLConnection conn = getConnection(url);
             conn.setRequestMethod(method);
             Authentication authentication = new Authentication();
             String token = authentication.create(serviceId, apiKey);
@@ -376,31 +406,51 @@ public class NotificationClient implements NotificationClientApi {
         }
     }
 
-    private HttpsURLConnection getConnection(URL url) throws IOException {
-        HttpsURLConnection conn;
+    private HttpURLConnection getConnection(URL url) throws IOException {
+        HttpURLConnection conn;
 
         if (null != proxy) {
-            conn = (HttpsURLConnection) url.openConnection(proxy);
+            conn = (HttpURLConnection) url.openConnection(proxy);
         } else {
-            conn = (HttpsURLConnection) url.openConnection();
+            conn = (HttpURLConnection) url.openConnection();
         }
         return conn;
     }
 
-    private JSONObject createBodyForPostRequest(final String templateId, final String phoneNumber, final String emailAddress, final Map<String, String> personalisation, final String reference) {
+    private JSONObject createBodyForPostRequest(final String templateId,
+                                                final String phoneNumber,
+                                                final String emailAddress,
+                                                final Map<String, ?> personalisation,
+                                                final String reference,
+                                                final String encodedFileData,
+                                                final String postage) {
         JSONObject body = new JSONObject();
+
         if(phoneNumber != null && !phoneNumber.isEmpty()) {
             body.put("phone_number", phoneNumber);
         }
+
         if(emailAddress != null && !emailAddress.isEmpty()) {
             body.put("email_address", emailAddress);
         }
-        body.put("template_id", templateId);
-        if (personalisation != null && !personalisation.isEmpty()) {
-            body.put("personalisation", new JSONObject(personalisation));
+
+        if(templateId != null && !templateId.isEmpty()) {
+            body.put("template_id", templateId);
         }
+
+        if (personalisation != null && !personalisation.isEmpty()) {
+            body.put("personalisation", personalisation);
+        }
+
         if(reference != null && !reference.isEmpty()){
             body.put("reference", reference);
+        }
+
+        if(encodedFileData != null && !encodedFileData.isEmpty()) {
+            body.put("content", encodedFileData);
+        }
+        if(postage != null && !postage.isEmpty()){
+            body.put("postage", postage);
         }
         return body;
     }
@@ -408,9 +458,9 @@ public class NotificationClient implements NotificationClientApi {
     private StringBuilder readStream(InputStreamReader streamReader) throws IOException {
         StringBuilder sb = new StringBuilder();
         BufferedReader br = new BufferedReader(streamReader);
-        String line = null;
+        String line;
         while ((line = br.readLine()) != null) {
-            sb.append(line + "\n");
+            sb.append(line).append("\n");
         }
         br.close();
         return sb;
@@ -423,14 +473,12 @@ public class NotificationClient implements NotificationClientApi {
      * (eg provide certification for client authentication).
      * <p/>
      * Use case: enterprise proxy requiring HTTPS client authentication
-     *
-     * @throws NoSuchAlgorithmException
      */
     private static void setDefaultSSLContext() throws NoSuchAlgorithmException {
         HttpsURLConnection.setDefaultSSLSocketFactory(SSLContext.getDefault().getSocketFactory());
     }
 
-    private static void setCustomSSLContext(final SSLContext sslContext) throws NoSuchAlgorithmException {
+    private static void setCustomSSLContext(final SSLContext sslContext) {
         HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
     }
 
@@ -447,22 +495,110 @@ public class NotificationClient implements NotificationClientApi {
     private String getVersion(){
         InputStream input = null;
         Properties prop = new Properties();
-        try {
+        try
+        {
             input = getClass().getClassLoader().getResourceAsStream("application.properties");
 
             prop.load(input);
 
-        } catch (IOException ex) {
+        }
+        catch (IOException ex)
+        {
             ex.printStackTrace();
-        } finally {
-            if (input != null) {
-                try {
+        }
+        finally
+        {
+            if (input != null)
+            {
+                try
+                {
                     input.close();
-                } catch (IOException e) {
+                }
+                catch (IOException e)
+                {
                     e.printStackTrace();
                 }
             }
         }
         return prop.getProperty("project.version");
     }
+
+    private LetterResponse sendPrecompiledLetter(String reference, String base64EncodedPDFFile, String postage) throws NotificationClientException {
+        if( StringUtils.isBlank(reference) )
+        {
+            throw new NotificationClientException("reference cannot be null or empty");
+        }
+
+        if ( StringUtils.isBlank(base64EncodedPDFFile) )
+        {
+            throw new NotificationClientException("precompiledPDF cannot be null or empty");
+        }
+
+        if(!PdfUtils.isBase64StringPDF(base64EncodedPDFFile))
+        {
+            throw new NotificationClientException("base64EncodedPDFFile is not a PDF");
+        }
+
+        JSONObject body = createBodyForPostRequest(null,
+                null,
+                null,
+                null,
+                reference,
+                base64EncodedPDFFile,
+                postage);
+
+        HttpURLConnection conn = createConnectionAndSetHeaders(
+                baseUrl + "/v2/notifications/letter",
+                "POST"
+        );
+
+        String response = performPostRequest(conn, body, HttpsURLConnection.HTTP_CREATED);
+        return new LetterResponse(response);
+
+    }
+
+    @Override
+    public LetterResponse sendPrecompiledLetter(String reference, File precompiledPDF) throws NotificationClientException {
+        return sendPrecompiledLetter(reference, precompiledPDF, null);
+    }
+
+    @Override
+    public LetterResponse sendPrecompiledLetter(String reference, File precompiledPDF, String postage) throws NotificationClientException {
+        if (precompiledPDF == null)
+        {
+            throw new NotificationClientException("File cannot be null");
+        }
+        byte[] buf;
+        try {
+            buf = FileUtils.readFileToByteArray(precompiledPDF);
+        } catch (IOException e) {
+            throw new NotificationClientException("Can't read file");
+        }
+        return sendPrecompiledLetterWithInputStream(reference, new ByteArrayInputStream(buf), postage);
+    }
+
+    @Override
+    public LetterResponse sendPrecompiledLetterWithInputStream(String reference, InputStream stream) throws NotificationClientException
+    {
+       return sendPrecompiledLetterWithInputStream(reference, stream, null);
+    }
+
+    @Override
+    public LetterResponse sendPrecompiledLetterWithInputStream(String reference, InputStream stream, String postage) throws NotificationClientException
+    {
+        if (stream == null)
+        {
+            throw new NotificationClientException("Input stream cannot be null");
+        }
+        Base64InputStream base64InputStream = new Base64InputStream(stream, true, 0, null);
+        String encoded;
+        try {
+            encoded = IOUtils.toString(base64InputStream, "ISO-8859-1");
+        } catch (IOException e) {
+            throw new NotificationClientException("Error when turning Base64InputStream into a string");
+        }
+
+        return sendPrecompiledLetter(reference, encoded, postage);
+    }
+
 }

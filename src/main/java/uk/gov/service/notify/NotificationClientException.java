@@ -1,19 +1,34 @@
 package uk.gov.service.notify;
 
-public class NotificationClientException extends Exception {
-    private static final long serialVersionUID = 2l;
+public class NotificationClientException extends Exception
+{
+    private static final long serialVersionUID = 2L;
     private int httpResult;
 
-    public NotificationClientException(Exception ex) {
+    public NotificationClientException(Exception ex)
+    {
         super(ex);
     }
 
-    NotificationClientException(int httpResult, String message) {
+    public NotificationClientException(String message)
+    {
+        super(message);
+        this.httpResult = 400;
+    }
+
+    public NotificationClientException(String message, Throwable cause)
+    {
+        super(message, cause);
+    }
+
+    NotificationClientException(int httpResult, String message)
+    {
         super("Status code: " + httpResult + " " + message);
         this.httpResult = httpResult;
     }
 
-    public int getHttpResult(){
+    public int getHttpResult()
+    {
         return this.httpResult;
     }
 }
